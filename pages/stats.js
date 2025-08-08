@@ -5,7 +5,7 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/stats")
+    fetch("/api")
       .then((res) => res.json())
       .then((data) => {
         setStats(data);
