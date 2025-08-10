@@ -1,33 +1,55 @@
-let stats = {}; // global object
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  sendAndConfirmTransaction
+} from "@solana/web3.js";
+import bs58 from "bs58";
 
-const defaultStats = () => ({
-  scanari: 0,
-  tranzactii_noi: 0,
-  transferuri: 0,
-  error_transferuri: 0,
-});
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-export default function handler(req, res) {
-  if (req.method === "POST") {
-    const data = req.body;
+  try {
+    const {
+      rpcUrl,
+      senderSecretKey,
+      receiverAddress,
+      amountSol
+    } = req.query;
 
-    for (const address in data) {
-      if (!stats[address]) {
-        stats[address] = defaultStats();
-      }
-      const updates = data[address];
-
-      for (const key in updates) {
-        if (stats[address].hasOwnProperty(key)) {
-          stats[address][key] += updates[key];
-        }
-      }
+    if (!rpcUrl || !senderSecretKey || !receiverAddress || !amountSol) {
+      return res.status(400).json({ error: "Missing required parameters" });
     }
 
-    res.status(200).json({ message: "Stats updated", stats });
-  } else if (req.method === "GET") {
-    res.status(200).json(stats);
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
+    const connection = new Connection(rpcUrl, "confirmed");
+    const senderKeypair = Keypair.fromSecretKey(bs58.decode(senderSecretKey));
+    const receiverPubkey = new PublicKey(receiverAddress);
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderKeypair.publicKey,
+        toPubkey: receiverPubkey,
+        lamports: parseFloat(amountSol) * 1_000_000_000
+      })
+    );
+
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [senderKeypair]
+    );
+
+    return res.status(200).json({
+      message: "Transaction sent successfully",
+      signature,
+      explorer: `https://explorer.solana.com/tx/${signature}?cluster=mainnet-beta`
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message });
   }
 }
